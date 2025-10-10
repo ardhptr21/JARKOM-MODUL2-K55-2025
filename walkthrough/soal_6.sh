@@ -1,5 +1,5 @@
 # ==== TIRION ====
-dig @localhost k55.com SOA +short
+dig @localhost jarkom-k55.com SOA +short
 
 # ==== VALMAR ====
-dig @localhost k55.com SOA +short
+dig @localhost jarkom-k55.com SOA +short

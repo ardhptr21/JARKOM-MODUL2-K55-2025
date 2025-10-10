@@ -1,5 +1,5 @@
 # ==== TIRION ====
-cat <<EOF >> /etc/bind/k55/k55.com
+cat <<EOF >> /etc/bind/k55/jarkom-k55.com
 ; Subdomain A Record
 earendil       IN       A      10.91.1.2
 elwing         IN       A      10.91.1.3

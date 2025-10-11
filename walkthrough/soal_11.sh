@@ -5,7 +5,7 @@ apt install nginx -y
 cat <<EOF > /etc/nginx/sites-available/default
 server {
     listen 80;
-    server_name www.jarkom-k55.com sirion.jarkom-k55.com;
+    server_name www.k55.com sirion.k55.com;
 
     proxy_set_header Host \$host;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -18,11 +18,11 @@ server {
     }
 
     location /static/ {
-        proxy_pass http://lindon.jarkom-k55.com/;
+        proxy_pass http://lindon.k55.com/;
     }
 
     location /app/ {
-        proxy_pass http://vingilot.jarkom-k55.com/;
+        proxy_pass http://vingilot.k55.com/;
     }
 }
 EOF

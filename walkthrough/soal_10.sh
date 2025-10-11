@@ -4,7 +4,7 @@ apt install apache2 php php8.4-fpm libapache2-mod-fcgid -y
 
 cat <<EOF > /etc/apache2/sites-available/000-default.conf
 <VirtualHost *:80>
-    ServerAdmin webmaster@vingilot.jarkom-k55.com
+    ServerAdmin webmaster@vingilot.k55.com
     DocumentRoot /var/www/html
 
     <Directory /var/www/html>

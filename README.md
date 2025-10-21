@@ -575,8 +575,6 @@ Untuk membuktikan bahwa *web server* dinamis di Vingilot berfungsi dengan benar,
 
     **Hasil:** Server berhasil merespons dengan output dari `index.php`, yaitu `Hello Vingilot`.
 
-    ![](assets/soal_10_1.png)
-
 
 2.  **Mengakses Halaman dengan URL Rewrite:** Perintah ini untuk memverifikasi bahwa aturan di `.htaccess` berfungsi.
 
@@ -586,6 +584,241 @@ Untuk membuktikan bahwa *web server* dinamis di Vingilot berfungsi dengan benar,
 
     **Hasil:** Server berhasil merespons dengan output dari `about.php`, yaitu `About Vingilot`.
 
-    ![](assets/soal_10_2.png)
+    ![](assets/soal_10.png)
 
 
+11. Di muara sungai, Sirion berdiri sebagai reverse proxy. Terapkan path-based routing: /static → Lindon dan /app → Vingilot, sambil meneruskan header Host dan X-Real-IP ke backend. Pastikan Sirion menerima www.<xxxx>.com (kanonik) dan sirion.<xxxx>.com, dan bahwa konten pada /static dan /app di-serve melalui backend yang tepat.
+
+---
+
+Pada soal ini, kami mengkonfigurasi **Sirion** untuk berfungsi sebagai **Reverse Proxy**. Tujuannya adalah agar Sirion menjadi satu-satunya pintu gerbang (`front door`) untuk semua layanan web. Klien dari luar hanya perlu tahu alamat Sirion (`www.k55.com`), dan Sirion yang akan secara cerdas meneruskan permintaan tersebut ke server yang benar di belakangnya (Lindon atau Vingilot) berdasarkan *path* URL yang diminta.
+
+-----
+
+#### **Konfigurasi di Sirion**
+
+Langkah pertama adalah menginstal **Nginx**, perangkat lunak yang akan kami gunakan sebagai *reverse proxy*.
+
+```sh
+apt update
+apt install nginx -y
+```
+
+Selanjutnya, kami membuat file konfigurasi *server block* utama untuk Nginx. Konfigurasi ini melakukan beberapa hal penting:
+
+  * **`listen 80`**: Mendengarkan permintaan masuk pada port 80.
+  * **`server_name www.k55.com sirion.k55.com`**: Merespons permintaan yang ditujukan untuk kedua nama domain ini.
+  * **`proxy_set_header`**: Meneruskan *header* penting seperti `Host` dan IP asli klien (`X-Real-IP`) ke server *backend*. Ini penting agar server *backend* tahu siapa klien yang sebenarnya.
+  * **`location /static/`**: Ini adalah aturan *path-based routing*. Setiap permintaan yang URL-nya diawali dengan `/static/` akan diteruskan (`proxy_pass`) ke server Lindon (`http://lindon.k55.com/`).
+  * **`location /app/`**: Demikian pula, setiap permintaan yang URL-nya diawali dengan `/app/` akan diteruskan ke server Vingilot (`http://vingilot.k55.com/`).
+
+<!-- end list -->
+
+```sh
+cat <<EOF > /etc/nginx/sites-available/default
+server {
+    listen 80;
+    server_name www.k55.com sirion.k55.com;
+
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP \$remote_addr;
+
+    location / {
+        root /var/www/html;
+        index index.html index.htm;
+        try_files \$uri \$uri/ =404;
+    }
+
+    location /static/ {
+        proxy_pass http://lindon.k55.com/;
+    }
+
+    location /app/ {
+        proxy_pass http://vingilot.k55.com/;
+    }
+}
+EOF
+```
+
+Terakhir, kami me-restart layanan Nginx untuk menerapkan konfigurasi baru.
+
+```sh
+service nginx restart
+```
+
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa *reverse proxy* berfungsi dengan benar, kami melakukan validasi dari klien **Earendil** dengan `curl`. Kami menguji kedua *path* untuk memastikan permintaan diteruskan ke *backend* yang benar.
+
+**Cara Validasi:**
+
+1.  **Mengakses Path Statis (`/static/`):**
+    Kami mengirim permintaan ke `www.k55.com/static/`. Sirion seharusnya meneruskan ini ke Lindon.
+
+    ```sh
+    curl http://www.k55.com/static/
+    ```
+
+    **Hasil yang Diharapkan:** *Output*-nya harus berupa halaman HTML *directory listing* dari Apache di **Lindon**. Ini membuktikan bahwa *path-based routing* untuk layanan statis berhasil.
+
+2.  **Mengakses Path Dinamis (`/app/`):**
+    Kami mengirim permintaan ke `www.k55.com/app/`. Sirion seharusnya meneruskan ini ke Vingilot.
+
+    ```sh
+    curl http://www.k55.com/app/
+    ```
+
+    **Hasil yang Diharapkan:** *Output*-nya harus berupa teks `Hello Vingilot` yang dihasilkan oleh skrip PHP di **Vingilot**. Ini membuktikan bahwa *path-based routing* untuk layanan dinamis juga berhasil.
+
+Keberhasilan kedua pengujian ini memvalidasi bahwa Sirion telah berhasil dikonfigurasi sebagai *reverse proxy* yang fungsional.
+
+12. Ada kamar kecil di balik gerbang yakni /admin. Lindungi path tersebut di Sirion menggunakan Basic Auth, akses tanpa kredensial harus ditolak dan akses dengan kredensial yang benar harus diizinkan.
+
+---
+
+Pada soal ini, kami diminta untuk mengamankan sebuah *path* atau direktori khusus, yaitu `/admin/`, pada *reverse proxy* **Sirion**. Tujuannya adalah agar hanya pengguna yang memiliki kredensial (nama pengguna dan kata sandi) yang benar yang dapat mengakses konten di dalamnya. Kami mengimplementasikan ini menggunakan fitur **Basic Authentication** dari Nginx.
+
+-----
+
+#### **Konfigurasi di Sirion**
+
+Langkah pertama adalah menginstal paket `apache2-utils`, yang berisi utilitas `htpasswd` untuk membuat file kata sandi.
+
+```sh
+apt install apache2-utils -y
+```
+
+Selanjutnya, kami menggunakan `htpasswd` untuk membuat file kata sandi di `/etc/nginx/.htpasswd`. Perintah ini membuat pengguna baru bernama `sirion` dengan kata sandi `sirion123`.
+
+```sh
+htpasswd -cb /etc/nginx/.htpasswd sirion sirion123
+```
+
+Kemudian, kami memperbarui file konfigurasi Nginx di Sirion dengan menambahkan *location block* baru untuk `^~ /admin/`. Blok ini berisi dua arahan penting:
+
+  * `auth_basic`: Menampilkan pesan "Sirion Restricted Area" pada kotak *login*.
+  * `auth_basic_user_file`: Menunjuk ke file `/etc/nginx/.htpasswd` sebagai sumber kredensial yang valid.
+
+<!-- end list -->
+
+```sh
+cat <<EOF > /etc/nginx/sites-available/default
+server {
+    listen 80;
+    server_name www.k55.com sirion.k55.com;
+
+    # ... (konfigurasi proxy_set_header dan location lain) ...
+
+    location ^~ /admin/ {
+        auth_basic "Sirion Restricted Area";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        alias /var/www/admin/;
+        index index.html;
+    }
+}
+EOF
+```
+
+Kami juga membuat direktori dan file `index.html` sederhana yang akan disajikan setelah otentikasi berhasil.
+
+```sh
+mkdir -p /var/www/admin
+echo "Sirion Admin GG" > /var/www/admin/index.html
+```
+
+Terakhir, kami me-restart layanan Nginx untuk menerapkan perubahan.
+
+```sh
+service nginx restart
+```
+
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa *Basic Authentication* berfungsi, kami melakukan dua skenario pengujian dari klien **Earendil** menggunakan `curl`.
+
+**Cara Validasi:**
+
+1.  **Mengakses Tanpa Kredensial (Harus Gagal):**
+    Kami mencoba mengakses *path* `/admin/` tanpa memberikan nama pengguna atau kata sandi.
+
+    ```sh
+    curl -I http://www.k55.com/admin/
+    ```
+
+    (Opsi `-I` digunakan untuk hanya melihat *header* respons dari server).
+    **Hasil yang Diharapkan:** Server harus merespons dengan kode status `401 Unauthorized`. Ini membuktikan bahwa direktori tersebut memang dilindungi dan akses ditolak.
+
+2.  **Mengakses Dengan Kredensial yang Benar (Harus Berhasil):**
+    Kami mencoba lagi, kali ini dengan menyertakan kredensial yang benar (`sirion:sirion123`) menggunakan opsi `--user`.
+
+    ```sh
+    curl --user sirion:sirion123 http://www.k55.com/admin/
+    ```
+
+    **Hasil yang Diharapkan:** Server berhasil mengotentikasi pengguna dan menyajikan konten dari file `index.html`, yaitu `Sirion Admin GG`. Ini membuktikan bahwa pengguna dengan kredensial yang benar dapat mengakses area yang dilindungi.
+
+Keberhasilan kedua pengujian ini memvalidasi bahwa kami telah berhasil mengamankan direktori `/admin/` menggunakan *Basic Authentication*.
+
+
+13. “Panggil aku dengan nama,” ujar Sirion kepada mereka yang datang hanya menyebut angka. Kanonisasikan endpoint, akses melalui IP address Sirion maupun sirion.<xxxx>.com harus redirect 301 ke www.<xxxx>.com sebagai hostname kanonik.
+
+---
+
+Pada soal ini, kami menerapkan **kanonikalisasi**, sebuah proses untuk memastikan bahwa sebuah situs web hanya dapat diakses melalui satu alamat utama atau "kanonik". Tujuannya adalah untuk menghindari duplikasi konten di mata mesin pencari dan memberikan pengalaman yang konsisten kepada pengguna.
+
+Kami mengkonfigurasi **Sirion** agar setiap permintaan yang masuk menggunakan alamat IP-nya (`10.91.3.2`) akan secara otomatis dialihkan secara permanen (redirect 301) ke nama domain kanonik, yaitu `http://www.k55.com`.
+
+-----
+
+#### **Konfigurasi di Sirion**
+
+Untuk mencapai ini, kami menambahkan *server block* baru di bagian atas file konfigurasi Nginx (`/etc/nginx/sites-available/default`). *Server block* ini secara khusus menangani permintaan yang ditujukan langsung ke alamat IP Sirion.
+
+  * **`server_name 10.91.3.2;`**: Aturan ini hanya berlaku jika *host* yang diminta adalah alamat IP `10.91.3.2`.
+  * **`return 301 http://www.k55.com$request_uri;`**: Perintah ini menginstruksikan Nginx untuk mengembalikan respons `301 Moved Permanently`, yang memberitahu *browser* atau klien untuk pindah ke alamat `http://www.k55.com`, dengan tetap mempertahankan *path* URL aslinya (`$request_uri`).
+
+<!-- end list -->
+
+```sh
+# Menambahkan server block baru untuk kanonikalisasi
+cat <<EOF > /etc/nginx/sites-available/default
+server {
+    server_name 10.91.3.2;
+    return 301 http://www.k55.com\$request_uri;
+}
+
+# ... (server block utama untuk www.k55.com berada di bawahnya) ...
+
+EOF
+
+# Menerapkan perubahan
+service nginx restart
+```
+
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa kanonikalisasi berfungsi dengan benar, kami melakukan pengujian dari klien **Earendil** menggunakan `curl` dengan opsi `-I` untuk memeriksa *header* respons dari server.
+
+**Cara Validasi:**
+Kami mengirim permintaan langsung ke alamat IP Sirion dan memeriksa apakah server merespons dengan pengalihan (redirect) yang benar.
+
+```sh
+curl -I http://10.91.3.2/
+```
+
+**Hasil yang Diharapkan:**
+Jika konfigurasi berhasil, server tidak akan menampilkan konten halaman. Sebaliknya, ia akan mengirimkan *header* respons yang berisi:
+
+  * **`HTTP/1.1 301 Moved Permanently`**: Kode status yang menandakan pengalihan permanen.
+  * **`Location: http://www.k55.com/`**: URL tujuan ke mana klien harus diarahkan.
+
+Hasil ini secara akurat memvalidasi bahwa setiap pengguna yang mencoba mengakses server menggunakan alamat IP akan secara otomatis dan paksa diarahkan untuk menggunakan nama domain kanonik `www.k55.com`, sesuai dengan tujuan dari soal ini.
+
+14. Di Vingilot, catatan kedatangan harus jujur. Pastikan access log aplikasi di Vingilot mencatat IP address klien asli saat lalu lintas melewati Sirion (bukan IP Sirion).

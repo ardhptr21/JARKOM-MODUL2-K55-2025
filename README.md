@@ -825,3 +825,134 @@ Jika konfigurasi berhasil, server tidak akan menampilkan konten halaman. Sebalik
 
 
 14. Di Vingilot, catatan kedatangan harus jujur. Pastikan access log aplikasi di Vingilot mencatat IP address klien asli saat lalu lintas melewati Sirion (bukan IP Sirion).
+
+-----
+
+#### **Konfigurasi di Vingilot**
+
+Untuk mencapai ini, kami mengaktifkan modul `remoteip` pada Apache di Vingilot. Modul ini dirancang khusus untuk mengganti alamat IP koneksi dengan alamat IP yang disediakan dalam *header* permintaan.
+
+```sh
+a2enmod remoteip
+```
+
+Selanjutnya, kami memperbarui file konfigurasi *Virtual Host* Apache di Vingilot dengan menambahkan dua arahan penting:
+
+  * **`RemoteIPHeader X-Real-IP`**: Memberitahu Apache untuk mencari IP klien asli di dalam *header* bernama `X-Real-IP`. *Header* ini sebelumnya sudah kita atur di Nginx (Sirion) pada soal 11.
+  * **`RemoteIPTrustedProxy 10.91.3.2`**: Memberitahu Apache untuk hanya mempercayai nilai `X-Real-IP` jika permintaan datang dari *proxy* yang terpercaya, yaitu Sirion dengan alamat IP `10.91.3.2`.
+
+<!-- end list -->
+
+```sh
+cat <<EOF > /etc/apache2/sites-available/000-default.conf
+<VirtualHost *:80>
+    ServerAdmin webmaster@vingilot.k55.com
+    DocumentRoot /var/www/html
+
+    # ... (konfigurasi lainnya) ...
+
+    RemoteIPHeader X-Real-IP
+    RemoteIPTrustedProxy 10.91.3.2
+
+    ErrorLog /var/log/apache2/error.log
+    CustomLog /var/log/apache2/access.log combined
+</VirtualHost>
+EOF
+```
+
+Terakhir, kami me-restart layanan Apache2 untuk menerapkan perubahan.
+
+```sh
+service apache2 restart
+```
+
+![](assets/soal_14_3.png)
+
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa Vingilot sekarang mencatat IP klien yang benar, kami melakukan serangkaian langkah verifikasi.
+
+**Cara Validasi:**
+
+1.  **Kirim Permintaan dari Klien:** Pertama, dari terminal **Earendil** (dengan IP `10.91.1.2`), kami mengirimkan sebuah permintaan ke layanan dinamis melalui Sirion.
+
+    ```sh
+    curl http://www.k55.com/app/
+    ```
+
+    ![](assets/soal_14_1.png)
+
+2.  **Periksa Log di Vingilot:** Segera setelah permintaan dikirim, kami membuka terminal **Vingilot** dan memeriksa baris terakhir dari file `access.log` Apache.
+
+    ```sh
+    tail -n 1 /var/log/apache2/access.log
+    ```
+    ![](assets/soal_14_2.png)
+
+
+Dengan munculnya alamat IP `10.91.1.2` di dalam log Vingilot, kami berhasil memvalidasi bahwa server *backend* kini memiliki catatan yang "jujur" mengenai siapa yang mengaksesnya.
+
+15. Pelabuhan diuji gelombang kecil, salah satu klien yakni Elrond menjadi penguji dan menggunakan ApacheBench (ab) untuk membombardir http://www.<xxxx>.com/app/ dan http://www.<xxxx>.com/static/ melalui hostname kanonik. Untuk setiap endpoint lakukan 500 request dengan concurrency 10, dan rangkum hasil dalam tabel ringkas.
+
+Tujuannya adalah untuk mengukur dan membandingkan kinerja kedua layanan di bawah beban: **500 total permintaan** dengan **10 permintaan berjalan secara bersamaan** (*concurrency*).
+
+-----
+
+#### **Konfigurasi di Elrond**
+
+Langkah pertama di Elrond adalah menginstal paket `apache2-utils`, yang di dalamnya terdapat alat `ab`.
+
+```sh
+apt update
+apt install apache2-utils -y
+```
+
+Setelah instalasi selesai, kami siap untuk menjalankan pengujian.
+
+-----
+
+#### **Validasi dan Pengujian**
+
+Kami menjalankan dua perintah `ab` secara terpisah, satu untuk setiap *endpoint*, melalui nama domain kanonik `www.k55.com`.
+
+**Cara Validasi:**
+
+1.  **Uji Beban pada Layanan Dinamis (`/app/`):**
+    Perintah ini mengirimkan 500 permintaan ke Vingilot, dengan 10 koneksi konkuren.
+
+    ```sh
+    ab -n 500 -c 10 http://www.k55.com/app/
+    ```
+    ![](assets/soal_15_1.png)
+
+
+2.  **Uji Beban pada Layanan Statis (`/static/`):**
+    Perintah ini mengirimkan 500 permintaan ke Lindon, dengan 10 koneksi konkuren.
+
+    ```sh
+    ab -n 500 -c 10 http://www.k55.com/static/
+    ```
+    ![](assets/soal_15_2.png)
+
+**Hasil yang Diharapkan:**
+Setelah setiap perintah selesai, ApacheBench akan mencetak laporan statistik. Metrik utama yang kami perhatikan adalah:
+
+  * **`Failed requests`**: Angka ini harus **0**, yang menandakan server mampu menangani semua permintaan tanpa eror.
+  * **`Requests per second`**: Menunjukkan throughput server. Angka yang lebih tinggi berarti kinerja lebih baik.
+  * **`Time per request`**: Waktu rata-rata untuk melayani satu permintaan. Angka yang lebih rendah berarti server lebih responsif.
+
+#### **Rangkuman Hasil**
+
+Berikut adalah rangkuman hasil dari pengujian yang kami lakukan. Kedua layanan berhasil menangani semua permintaan tanpa ada yang gagal.
+
+| Metrik | Layanan Dinamis (`/app/`) | Layanan Statis (`/static/`) |
+| :--- | :--- | :--- |
+| Total Permintaan | 500 | 500 |
+| Permintaan Gagal | 0 | 0 |
+| **Requests per second** | **3870.42** [\#/detik] | **4023.63** [\#/detik] |
+| **Time per request** | **2.584** [ms] | **2.485** [ms] |
+
+Hasil pengujian ini memvalidasi bahwa kedua layanan mampu menangani beban yang diberikan tanpa mengalami kegagalan. Sesuai perkiraan, layanan statis menunjukkan kinerja yang sedikit lebih unggul (throughput lebih tinggi dan waktu respons lebih rendah) dibandingkan dengan layanan dinamis.
+

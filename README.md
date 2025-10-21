@@ -442,7 +442,7 @@ host -t ptr 10.91.3.6
 ```
 Hasil verifikasi menunjukkan bahwa setiap alamat IP berhasil dipetakan kembali ke *hostname* yang sesuai, menandakan konfigurasi *Reverse DNS* telah berhasil.
 
-![](assets/soal_8.png)
+![](assets/Soal_8.png)
 
 
 

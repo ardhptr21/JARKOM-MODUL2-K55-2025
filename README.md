@@ -765,7 +765,7 @@ Untuk membuktikan bahwa *Basic Authentication* berfungsi, kami melakukan dua ske
 
     ![](assets/soal_12.png)
 
-
+---
 
 13. “Panggil aku dengan nama,” ujar Sirion kepada mereka yang datang hanya menyebut angka. Kanonisasikan endpoint, akses melalui IP address Sirion maupun sirion.<xxxx>.com harus redirect 301 ke www.<xxxx>.com sebagai hostname kanonik.
 
@@ -823,6 +823,7 @@ Jika konfigurasi berhasil, server tidak akan menampilkan konten halaman. Sebalik
 
     ![](assets/soal_13.png)
 
+--- 
 
 14. Di Vingilot, catatan kedatangan harus jujur. Pastikan access log aplikasi di Vingilot mencatat IP address klien asli saat lalu lintas melewati Sirion (bukan IP Sirion).
 
@@ -894,6 +895,8 @@ Untuk membuktikan bahwa Vingilot sekarang mencatat IP klien yang benar, kami mel
 
 Dengan munculnya alamat IP `10.91.1.2` di dalam log Vingilot, kami berhasil memvalidasi bahwa server *backend* kini memiliki catatan yang "jujur" mengenai siapa yang mengaksesnya.
 
+---
+
 15. Pelabuhan diuji gelombang kecil, salah satu klien yakni Elrond menjadi penguji dan menggunakan ApacheBench (ab) untuk membombardir http://www.<xxxx>.com/app/ dan http://www.<xxxx>.com/static/ melalui hostname kanonik. Untuk setiap endpoint lakukan 500 request dengan concurrency 10, dan rangkum hasil dalam tabel ringkas.
 
 Tujuannya adalah untuk mengukur dan membandingkan kinerja kedua layanan di bawah beban: **500 total permintaan** dengan **10 permintaan berjalan secara bersamaan** (*concurrency*).
@@ -956,13 +959,11 @@ Berikut adalah rangkuman hasil dari pengujian yang kami lakukan. Kedua layanan b
 
 Hasil pengujian ini memvalidasi bahwa kedua layanan mampu menangani beban yang diberikan tanpa mengalami kegagalan. Sesuai perkiraan, layanan statis menunjukkan kinerja yang sedikit lebih unggul (throughput lebih tinggi dan waktu respons lebih rendah) dibandingkan dengan layanan dinamis.
 
+---
+
 16. Badai mengubah garis pantai. Ubah A record lindon.<xxxx>.com ke alamat baru (ubah IP paling belakangnya saja agar mudah), naikkan SOA serial di Tirion (ns1) dan pastikan Valmar (ns2) tersinkron, karena static.<xxxx>.com adalah CNAME → lindon.<xxxx>.com, seluruh akses ke static.<xxxx>.com mengikuti alamat baru, tetapkan TTL = 30 detik untuk record yang relevan dan verifikasi tiga momen yakni sebelum perubahan (mengembalikan alamat lama), sesaat setelah perubahan namun sebelum TTL kedaluwarsa (masih alamat lama karena cache), dan setelah TTL kedaluwarsa (beralih ke alamat baru).
 
-Pada soal ini, kami mensimulasikan skenario perubahan alamat IP sebuah server dan mengamati bagaimana perubahan tersebut dipropagasi melalui sistem DNS. Tujuannya adalah untuk mempraktikkan pembaruan *record* DNS dan memvalidasi konsep **Time To Live (TTL)**.
-
-Kami mengubah *record* A untuk `lindon.k55.com` ke alamat IP baru, menetapkan TTL singkat selama 30 detik, dan memverifikasi perubahannya dari sisi klien.
-
------
+---
 
 #### **Konfigurasi di Tirion (Master)**
 
@@ -1104,8 +1105,6 @@ Untuk membuktikan bahwa konfigurasi *auto-start* berhasil, kami melakukan metode
 
 18. Sang musuh memiliki banyak nama. Tambahkan melkor.<xxxx>.com sebagai record TXT berisi “Morgoth (Melkor)” dan tambahkan morgoth.<xxxx>.com sebagai CNAME → melkor.<xxxx>.com, verifikasi query TXT terhadap melkor dan bahwa query ke morgoth mengikuti aliasnya.
 
-Kami menambahkan `melkor.k55.com` sebagai `TXT` record dan `morgoth.k55.com` sebagai alias yang menunjuk ke `melkor.k55.com`.
-
 -----
 
 #### **Konfigurasi di Tirion (Master)**
@@ -1163,16 +1162,6 @@ Untuk membuktikan bahwa kedua *record* tersebut berfungsi sesuai harapan, kami m
     **Hasil yang Diharapkan:** *Output* pada `ANSWER SECTION` akan menampilkan dua hal: pertama, bahwa `morgoth.k55.com` adalah `CNAME` untuk `melkor.k55.com`, dan kedua, `TXT` record dari `melkor.k55.com` itu sendiri.
 
 19.Pelabuhan diperluas bagi para pelaut. Tambahkan havens.<xxxx>.com sebagai CNAME → www.<xxxx>.com, lalu akses layanan melalui hostname tersebut dari dua klien berbeda untuk memastikan resolusi dan rute aplikasi berfungsi.
-
-Tentu, ini adalah format laporan untuk soal nomor 19 yang bisa langsung Anda salin dan tempel ke `README.md`.
-
------
-
-### 19\. Pelabuhan Diperluas (Alias Hostname Berlapis)
-
-Pada soal ini, kami menambahkan satu lagi nama alias untuk layanan kami. Tujuannya adalah untuk menunjukkan bagaimana CNAME dapat diarahkan ke CNAME lain, menciptakan sebuah rantai alias.
-
-Kami membuat `havens.k55.com` sebagai alias baru yang menunjuk ke nama domain kanonik kami, `www.k55.com`.
 
 -----
 

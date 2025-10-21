@@ -382,6 +382,70 @@ service bind9 restart
 
 ---
 
+#### **Konfigurasi di Tirion (Master)**
+
+Pertama, kami mendeklarasikan *reverse zone* `3.91.10.in-addr.arpa` di file `/etc/bind/named.conf.local`.
+
+```sh
+cat <<EOF >> /etc/bind/named.conf.local
+zone "3.91.10.in-addr.arpa" {
+    type master;
+    file "/etc/bind/k55/3.91.10.in-addr.arpa";
+    allow-transfer { 10.91.3.4; };
+};
+EOF
+```
+
+Selanjutnya, kami membuat file *zone*-nya dan mengisinya dengan *record* `PTR` untuk Sirion (`10.91.3.2`), Lindon (`10.91.3.5`), dan Vingilot (`10.91.3.6`).
+
+```sh
+cat <<EOF > /etc/bind/k55/3.91.10.in-addr.arpa
+\$TTL    604800
+@       IN      SOA     ns1.k55.com. root.k55.com. (
+                        2025100401 ; Serial
+                        604800     ; Refresh
+                        86400      ; Retry
+                        2419200    ; Expire
+                        604800 )   ; Negative Cache TTL
+
+@        IN      NS     ns1.k55.com.
+@        IN      NS     ns2.k55.com.
+
+2       IN       PTR    sirion.k55.com.
+5       IN       PTR    lindon.k55.com.
+6       IN       PTR    vingilot.k55.com.
+EOF
+```
+
+#### **Konfigurasi di Valmar (Slave)**
+
+Di Valmar, kami mengkonfigurasinya sebagai *slave* untuk *reverse zone* yang sama, dengan menunjuk Tirion sebagai *master*.
+
+```sh
+cat <<EOF >> /etc/bind/named.conf.local
+zone "3.91.10.in-addr.arpa" {
+  type slave;
+  masters { 10.91.3.3; };
+  file "/var/lib/bind/k55/3.91.10.in-addr.arpa";
+};
+EOF
+```
+
+#### **Verifikasi**
+
+Pengujian dilakukan dari klien **Earendil** menggunakan perintah:
+
+```sh
+host -t ptr 10.91.3.2
+host -t ptr 10.91.3.5
+host -t ptr 10.91.3.6
+```
+Hasil verifikasi menunjukkan bahwa setiap alamat IP berhasil dipetakan kembali ke *hostname* yang sesuai, menandakan konfigurasi *Reverse DNS* telah berhasil.
+
+![](assets/soal_8.png)
+
+
+
 9. Lampion Lindon dinyalakan. Jalankan web statis pada hostname static.\<xxxx>.com dan buka folder arsip /annals/ dengan autoindex (directory listing) sehingga isinya dapat ditelusuri. Akses harus dilakukan melalui hostname, bukan IP.
 
 ---

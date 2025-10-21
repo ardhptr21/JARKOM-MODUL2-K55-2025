@@ -519,6 +519,73 @@ Jika konfigurasi berhasil, perintah `curl` akan mengembalikan output berupa kode
 
 ---
 
+Pada tahap ini, kami mengkonfigurasi **Vingilot** untuk berfungsi sebagai *web server* dinamis yang dapat mengeksekusi skrip PHP. Implementasi ini menggunakan **PHP-FPM** (FastCGI Process Manager) untuk performa yang lebih baik dan menerapkan **URL Rewrite** agar URL lebih ramah pengguna.
+
+-----
+
+#### **Konfigurasi di Vingilot**
+
+Langkah pertama adalah menginstal paket-paket yang diperlukan, yaitu Apache2, PHP, dan modul-modul terkait.
+
+```sh
+apt install apache2 php php8.4-fpm libapache2-mod-fcgid -y
 ```
 
+Selanjutnya, kami mengkonfigurasi *Virtual Host* Apache untuk meneruskan permintaan file `.php` ke *service* PHP-FPM melalui *socket*.
+
+```sh
+cat <<EOF > /etc/apache2/sites-available/000-default.conf
+<VirtualHost *:80>
+    ServerAdmin webmaster@vingilot.k55.com
+    DocumentRoot /var/www/html
+    <Directory /var/www/html>
+        AllowOverride All
+    </Directory>
+    <FilesMatch \.php$>
+        SetHandler "proxy:unix:/var/run/php/php8.4-fpm.sock|fcgi://localhost/"
+    </FilesMatch>
+</VirtualHost>
+EOF
 ```
+
+Untuk mengaktifkan URL *rewrite* (misalnya `/about` menjadi `about.php`), kami membuat file `.htaccess` di direktori web.
+
+```sh
+cat <<EOF > /var/www/html/.htaccess
+RewriteEngine On
+RewriteRule ^about$ about.php [L]
+EOF
+```
+
+Kami juga membuat dua file PHP sederhana, `index.php` dan `about.php`, sebagai konten untuk validasi. Terakhir, kami mengaktifkan modul Apache yang diperlukan dan me-restart layanan PHP-FPM serta Apache2.
+
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa *web server* dinamis di Vingilot berfungsi dengan benar, kami melakukan validasi dari klien **Earendil** menggunakan `curl`.
+
+**Cara Validasi:**
+
+1.  **Mengakses Halaman Utama:** Perintah ini untuk memverifikasi eksekusi PHP dasar.
+
+    ```sh
+    curl http://app.k55.com/
+    ```
+
+    **Hasil:** Server berhasil merespons dengan output dari `index.php`, yaitu `Hello Vingilot`.
+
+    ![](assets/soal_10_1.png)
+
+
+2.  **Mengakses Halaman dengan URL Rewrite:** Perintah ini untuk memverifikasi bahwa aturan di `.htaccess` berfungsi.
+
+    ```sh
+    curl http://app.k55.com/about
+    ```
+
+    **Hasil:** Server berhasil merespons dengan output dari `about.php`, yaitu `About Vingilot`.
+
+    ![](assets/soal_10_2.png)
+
+

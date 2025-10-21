@@ -450,6 +450,71 @@ Hasil verifikasi menunjukkan bahwa setiap alamat IP berhasil dipetakan kembali k
 
 ---
 
+Tentu, mari kita lanjutkan ke soal 9. Berikut adalah format laporan untuk `README.md` di GitHub, lengkap dengan penjelasan validasinya.
+
+-----
+
+### 9\. Lampion Lindon Dinyalakan (Web Server Statis)
+
+Pada soal ini, kami bertugas untuk mengaktifkan **Lindon** sebagai *web server* statis. Sesuai permintaan, *server* ini harus menyajikan konten dari direktori `/annals/` dengan fitur *autoindex* (daftar file) aktif. Akses ke *server* ini dilakukan melalui *hostname* `static.k55.com`.
+
+#### **Konfigurasi di Lindon**
+
+Langkah pertama adalah menginstal **Apache2**, yang merupakan perangkat lunak *web server* yang akan kami gunakan.
+
+```sh
+apt update
+apt install apache2 -y
+```
+
+Selanjutnya, kami membuat direktori `/var/www/annals/` yang akan menjadi *root* atau direktori utama untuk konten web.
+
+```sh
+mkdir -p /var/www/annals/
+```
+
+Kemudian, kami membuat file konfigurasi *Virtual Host* baru untuk Apache. Konfigurasi ini mengarahkan semua permintaan ke `DocumentRoot` `/var/www/annals` dan yang terpenting, mengaktifkan `Options +Indexes` untuk mengizinkan *directory listing*.
+
+```sh
+cat <<EOF > /etc/apache2/sites-available/000-default.conf
+<VirtualHost *:80>
+    ServerAdmin webmaster@lindon.k55.com
+    DocumentRoot /var/www/annals
+    <Directory /var/www/annals>
+        Options +Indexes
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    ErrorLog /var/log/apache2/error.log
+    CustomLog /var/log/apache2/access.log combined
+</VirtualHost>
+EOF
+```
+
+Terakhir, kami me-restart layanan Apache2 untuk menerapkan semua perubahan konfigurasi.
+
+```sh
+service apache2 restart
+```
+
+#### **Validasi**
+
+Untuk membuktikan bahwa *web server* di Lindon berjalan dengan benar, kami melakukan validasi dari salah satu klien, yaitu **Earendil**.
+
+**Cara Validasi:**
+Kami menggunakan perintah `curl` untuk mengakses *hostname* `static.k55.com` dari terminal Earendil. `curl` adalah alat baris perintah yang digunakan untuk mentransfer data dengan URL, yang dalam kasus ini akan mengambil konten halaman web.
+
+```sh
+curl static.k55.com
+```
+
+**Hasil yang Diharapkan:**
+Jika konfigurasi berhasil, perintah `curl` akan mengembalikan output berupa kode HTML. Output ini adalah halaman yang secara otomatis dibuat oleh Apache karena fitur `autoindex` aktif. Halaman ini akan berisi judul **"Index of /"**, yang menandakan bahwa *web server* berhasil menyajikan daftar isi dari direktori `/var/www/annals/`.
+
+![](assets/soal_9.png)
+
+
 10. Vingilot mengisahkan cerita dinamis. Jalankan web dinamis (PHP-FPM) pada hostname app.\<xxxx>.com dengan beranda dan halaman about, serta terapkan rewrite sehingga /about berfungsi tanpa akhiran .php. Akses harus dilakukan melalui hostname.
 
 ---

@@ -956,3 +956,316 @@ Berikut adalah rangkuman hasil dari pengujian yang kami lakukan. Kedua layanan b
 
 Hasil pengujian ini memvalidasi bahwa kedua layanan mampu menangani beban yang diberikan tanpa mengalami kegagalan. Sesuai perkiraan, layanan statis menunjukkan kinerja yang sedikit lebih unggul (throughput lebih tinggi dan waktu respons lebih rendah) dibandingkan dengan layanan dinamis.
 
+16. Badai mengubah garis pantai. Ubah A record lindon.<xxxx>.com ke alamat baru (ubah IP paling belakangnya saja agar mudah), naikkan SOA serial di Tirion (ns1) dan pastikan Valmar (ns2) tersinkron, karena static.<xxxx>.com adalah CNAME → lindon.<xxxx>.com, seluruh akses ke static.<xxxx>.com mengikuti alamat baru, tetapkan TTL = 30 detik untuk record yang relevan dan verifikasi tiga momen yakni sebelum perubahan (mengembalikan alamat lama), sesaat setelah perubahan namun sebelum TTL kedaluwarsa (masih alamat lama karena cache), dan setelah TTL kedaluwarsa (beralih ke alamat baru).
+
+Pada soal ini, kami mensimulasikan skenario perubahan alamat IP sebuah server dan mengamati bagaimana perubahan tersebut dipropagasi melalui sistem DNS. Tujuannya adalah untuk mempraktikkan pembaruan *record* DNS dan memvalidasi konsep **Time To Live (TTL)**.
+
+Kami mengubah *record* A untuk `lindon.k55.com` ke alamat IP baru, menetapkan TTL singkat selama 30 detik, dan memverifikasi perubahannya dari sisi klien.
+
+-----
+
+#### **Konfigurasi di Tirion (Master)**
+
+Semua perubahan konfigurasi DNS dilakukan pada server *master*, yaitu **Tirion**.
+
+Langkah pertama adalah mengedit file *zone* `/etc/bind/k55/k55.com`. Kami melakukan dua perubahan penting:
+
+1.  **Mengubah Record A:** Alamat IP untuk `lindon` diubah dari `10.91.3.5` menjadi `10.91.3.7`, dan kami menetapkan TTL spesifik `30` detik.
+2.  **Menaikkan Nomor Serial SOA:** Nomor serial kami naikkan menjadi `2025100402`. Ini adalah langkah krusial untuk memberitahu server *slave* (Valmar) bahwa ada pembaruan pada *zone*.
+
+<!-- end list -->
+
+```sh
+# Menimpa file zone dengan konfigurasi baru
+cat <<'EOF' > /etc/bind/k55/k55.com
+$TTL    604800
+@       IN      SOA     ns1.k55.com. root.k55.com. (
+                        2025100402 ; Serial (Sudah dinaikkan)
+                        # ... baris SOA lainnya
+                        )
+
+# ... (record NS dan A lainnya) ...
+
+lindon      30 IN       A      10.91.3.7   ; <-- PERUBAHAN DI SINI
+
+# ... (record CNAME) ...
+EOF
+```
+
+Setelah file disimpan, kami me-restart layanan `bind9` untuk menerapkan perubahan tersebut.
+
+```sh
+service bind9 restart
+```
+
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa perubahan IP dan TTL berfungsi, kami melakukan verifikasi dari klien **Earendil**.
+
+**Cara Validasi:**
+Kami menjalankan perintah `dig static.k55.com` pada terminal Earendil setelah perubahan di Tirion diterapkan.
+
+**Hasil Pengamatan:**
+Saat pengujian, Earendil langsung menerima **IP baru (`10.91.3.7`)** pada permintaan pertamanya. Hal ini mengindikasikan bahwa tidak ada *cache* aktif untuk alamat IP yang lama pada *resolver* Earendil saat permintaan dibuat.
+
+Meskipun kami tidak mengamati momen transisi dari IP lama ke IP baru, hasil ini tetap memvalidasi beberapa poin penting:
+
+1.  Perubahan *record* A di server DNS Tirion telah berhasil dan aktif.
+2.  Klien (Earendil) berhasil melakukan *query* dan menerima data yang sudah diperbarui dari server DNS.
+3.  TTL `30` detik yang baru telah diterima oleh klien, yang akan digunakan untuk *caching* pada permintaan-permintaan berikutnya.
+
+![](assets/soal_16.png)
+
+17. Andaikata bumi bergetar dan semua tertidur sejenak, mereka harus bangkit sendiri. Pastikan layanan inti bind9 di ns1/ns2, nginx di Sirion/Lindon, dan PHP-FPM di Vingilot autostart saat reboot, lalu verifikasi layanan kembali menjawab sesuai fungsinya.
+
+Pada soal ini, kami memastikan bahwa semua layanan inti pada setiap server akan berjalan kembali secara otomatis setelah proses *reboot*. Ini adalah praktik fundamental dalam administrasi sistem untuk menjamin ketersediaan dan ketahanan layanan (*service resiliency*) tanpa memerlukan intervensi manual.
+
+Karena sistem operasi yang kami gunakan berbasis SysVinit (bukan `systemd`), kami menggunakan perintah `update-rc.d` untuk mengkonfigurasi layanan agar aktif saat *booting*.
+
+-----
+
+#### **Konfigurasi**
+
+Kami menjalankan perintah yang sesuai pada setiap server untuk mengaktifkan layanan utamanya.
+
+  * **Di Tirion (ns1) & Valmar (ns2):**
+    Mengaktifkan layanan DNS BIND9.
+
+    ```sh
+    update-rc.d bind9 defaults
+    ```
+
+  * **Di Sirion (Reverse Proxy):**
+    Mengaktifkan layanan Nginx.
+
+    ```sh
+    update-rc.d nginx defaults
+    ```
+
+  * **Di Lindon (Web Statis):**
+    Mengaktifkan layanan web Apache2.
+
+    ```sh
+    update-rc.d apache2 defaults
+    ```
+
+  * **Di Vingilot (Web Dinamis):**
+    Mengaktifkan layanan Apache2 dan PHP-FPM.
+
+    ```sh
+    update-rc.d apache2 defaults
+    update-rc.d php8.4-fpm defaults
+    ```
+
+-----
+
+#### **Validasi dan Troubleshooting**
+
+Untuk membuktikan bahwa konfigurasi *auto-start* berhasil, kami melakukan metode verifikasi dengan me-reboot salah satu server dan memeriksa status layanannya setelah kembali menyala.
+
+**Cara Validasi:**
+
+1.  **Simulasi Reboot:** Kami melakukan simulasi *reboot* pada server **Tirion** dengan cara **Stop** dan **Start** *node* dari antarmuka GNS3.
+
+2.  **Pengecekan Status Awal (Gagal):** Setelah server kembali *online*, pengecekan status awal menunjukkan bahwa layanan `bind9` gagal berjalan secara otomatis.
+
+    ```sh
+    root@Tirion:~# service bind9 status
+    bind is not running ... failed!
+    ```
+
+3.  **Investigasi Masalah:** Kami melakukan investigasi untuk mencari penyebab kegagalan.
+
+      * `named-checkconf` tidak menunjukkan adanya kesalahan sintaks.
+      * Kami menjalankan BIND9 di *foreground* menggunakan `named -g -d 3` untuk melihat pesan *startup* secara langsung. Dari *log* tersebut, kami menemukan error **`permission denied`** saat BIND9 mencoba mengakses file `/etc/bind/rndc.key` dan file jurnal di `/var/cache/bind`.
+
+4.  **Perbaikan Izin Akses:** Kami memperbaiki masalah ini dengan mengatur kepemilikan file dan direktori yang benar menggunakan `chown` dan `chgrp` agar dapat diakses oleh pengguna `bind`.
+
+    ```sh
+    chown -R bind:bind /var/cache/bind
+    chgrp bind /etc/bind/rndc.key
+    chmod 640 /etc/bind/rndc.key
+    ```
+
+5.  **Validasi Ulang (Berhasil):** Setelah memperbaiki izin akses, kami mencoba me-restart layanan secara manual dan berhasil.
+
+    ```sh
+    root@Tirion:~# service bind9 restart
+    Starting domain name service...: named.
+    root@Tirion:~# service bind9 status
+    bind is running.
+    ```
+
+    Keberhasilan ini membuktikan bahwa masalahnya memang terletak pada izin akses. Dengan perbaikan ini, kami dapat memastikan layanan BIND9 kini akan dapat dimulai secara otomatis pada proses *booting* berikutnya. Proses validasi yang sama dapat diaplikasikan untuk semua layanan lain yang telah dikonfigurasi.
+
+![](assets/soal_17.png)
+
+18. Sang musuh memiliki banyak nama. Tambahkan melkor.<xxxx>.com sebagai record TXT berisi “Morgoth (Melkor)” dan tambahkan morgoth.<xxxx>.com sebagai CNAME → melkor.<xxxx>.com, verifikasi query TXT terhadap melkor dan bahwa query ke morgoth mengikuti aliasnya.
+
+Kami menambahkan `melkor.k55.com` sebagai `TXT` record dan `morgoth.k55.com` sebagai alias yang menunjuk ke `melkor.k55.com`.
+
+-----
+
+#### **Konfigurasi di Tirion (Master)**
+
+Semua perubahan konfigurasi DNS dilakukan pada server *master*, yaitu **Tirion**. Kami menambahkan dua baris berikut ke bagian akhir dari file *zone* `/etc/bind/k55/k55.com`.
+
+  * **`melkor IN TXT "Morgoth (Melkor)"`**: Baris ini membuat sebuah `TXT` record untuk `melkor.k55.com` yang berisi string teks "Morgoth (Melkor)".
+  * **`morgoth IN CNAME melkor.k55.com.`**: Baris ini membuat `morgoth.k55.com` sebagai alias (CNAME) yang menunjuk ke `melkor.k55.com`.
+
+<!-- end list -->
+
+```sh
+cat <<EOF >> /etc/bind/k55/k55.com
+; TXT dan CNAME record
+melkor       IN       TXT      "Morgoth (Melkor)"
+morgoth      IN       CNAME    melkor.k55.com.
+EOF
+```
+
+Setelah file disimpan, kami menaikkan nomor serial SOA dan me-restart layanan `bind9` untuk menerapkan perubahan tersebut.
+
+```sh
+service bind9 restart
+```
+![](assets/soal_18_1.png)
+
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa kedua *record* tersebut berfungsi sesuai harapan, kami melakukan verifikasi dari klien **Earendil** menggunakan perintah `dig` dengan menargetkan tipe *record* `TXT`.
+
+**Cara Validasi:**
+
+1.  **Query Langsung ke `melkor.k55.com`:**
+    Kami melakukan `dig` langsung ke nama domain yang memiliki `TXT` record.
+
+    ```sh
+    dig melkor.k55.com TXT
+    ```
+
+    **Hasil yang Diharapkan:** *Output* pada `ANSWER SECTION` harus menunjukkan `TXT` record dengan isi "Morgoth (Melkor)".
+
+    ![](assets/soal_18_2.png)
+
+
+2.  **Query ke Alias `morgoth.k55.com`:**
+    Kami melakukan `dig` ke nama aliasnya. Karena `morgoth` adalah CNAME dari `melkor`, *resolver* akan mengikuti alias tersebut dan mengembalikan *record* dari tujuannya.
+
+    ```sh
+    dig morgoth.k55.com TXT
+    ```
+    ![](assets/soal_18_3.png)
+
+    **Hasil yang Diharapkan:** *Output* pada `ANSWER SECTION` akan menampilkan dua hal: pertama, bahwa `morgoth.k55.com` adalah `CNAME` untuk `melkor.k55.com`, dan kedua, `TXT` record dari `melkor.k55.com` itu sendiri.
+
+19.Pelabuhan diperluas bagi para pelaut. Tambahkan havens.<xxxx>.com sebagai CNAME → www.<xxxx>.com, lalu akses layanan melalui hostname tersebut dari dua klien berbeda untuk memastikan resolusi dan rute aplikasi berfungsi.
+
+Tentu, ini adalah format laporan untuk soal nomor 19 yang bisa langsung Anda salin dan tempel ke `README.md`.
+
+-----
+
+### 19\. Pelabuhan Diperluas (Alias Hostname Berlapis)
+
+Pada soal ini, kami menambahkan satu lagi nama alias untuk layanan kami. Tujuannya adalah untuk menunjukkan bagaimana CNAME dapat diarahkan ke CNAME lain, menciptakan sebuah rantai alias.
+
+Kami membuat `havens.k55.com` sebagai alias baru yang menunjuk ke nama domain kanonik kami, `www.k55.com`.
+
+-----
+
+#### **Konfigurasi di Tirion (Master)**
+
+Konfigurasi ini hanya memerlukan satu baris tambahan di file *zone* `/etc/bind/k55/k55.com` pada server **Tirion**. Baris ini membuat `havens.k55.com` sebagai CNAME yang menunjuk ke `www.k55.com`.
+
+```sh
+cat <<EOF >> /etc/bind/k55/k55.com
+havens      IN       CNAME    www.k55.com.
+EOF
+```
+
+Setelah file disimpan, kami menaikkan nomor serial SOA dan me-restart layanan `bind9` untuk menerapkan perubahan.
+
+```sh
+service bind9 restart
+```
+![](assets/soal_19_1.png)
+
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa alias baru ini berfungsi dan semua permintaan dirutekan dengan benar melalui *reverse proxy*, kami melakukan verifikasi dari dua klien yang berbeda, yaitu **Earendil** dan **Cirdan**.
+
+**Cara Validasi:**
+Kami menggunakan `curl` dari kedua klien untuk mengakses salah satu layanan (misalnya `/app/`) menggunakan *hostname* `havens.k55.com` yang baru.
+
+  * **Dari Earendil:**
+
+    ```sh
+    curl http://havens.k55.com/app/
+    ```
+![](assets/soal_19_2.png)
+
+  * **Dari Cirdan:**
+
+    ```sh
+    curl http://havens.k55.com/app/
+    ```
+![](assets/soal_19_3.png)
+
+**Hasil yang Diharapkan:**
+Jika konfigurasi berhasil, kedua perintah `curl` tersebut harus mengembalikan output `Hello Vingilot`.
+
+Hasil ini memvalidasi beberapa hal secara berurutan:
+
+1.  DNS berhasil menerjemahkan `havens.k55.com` ke `www.k55.com`.
+2.  DNS kemudian menerjemahkan `www.k55.com` ke `sirion.k55.com` dan akhirnya ke alamat IP Sirion.
+3.  Permintaan berhasil masuk ke Sirion (reverse proxy), yang kemudian meneruskannya ke Vingilot.
+4.  Vingilot memproses permintaan dan mengembalikan konten yang benar.
+
+20.Kisah ditutup di beranda Sirion. Sediakan halaman depan bertajuk “War of Wrath: Lindon bertahan” yang memuat tautan ke /app dan /static. Pastikan seluruh klien membuka beranda dan menelusuri kedua tautan tersebut menggunakan hostname (mis. www.<xxxx>.com), bukan IP address.
+
+---
+
+Sebagai tugas terakhir, kami membuat halaman depan (*landing page*) sederhana untuk disajikan oleh **Sirion**. Halaman ini berfungsi sebagai portal utama yang memberikan navigasi mudah ke dua layanan utama yang ada di belakang *reverse proxy*: layanan statis (`/static`) dan layanan dinamis (`/app`).
+
+-----
+
+#### **Konfigurasi di Sirion**
+
+Kami membuat sebuah file `index.html` sederhana di dalam direktori *root* Nginx pada server **Sirion** (`/var/www/html/`). Halaman ini berisi judul "War of Wrath: Lindon bertahan" dan dua tautan (*hyperlink*) yang mengarah ke *path* `/app` dan `/static`.
+
+```sh
+cat <<EOF > /var/www/html/index.html
+<h1>War of Wrath: Lindon bertahan</h1>
+<a href="http://www.k55.com/app">App</a>
+<a href="http://www.k55.com/static">Static</a>
+EOF
+```
+![](assets/soal_20_1.png)
+
+Karena Nginx di Sirion sudah dikonfigurasi pada soal sebelumnya untuk menyajikan file dari direktori `/var/www/html/` untuk *path root* (`/`), tidak ada perubahan konfigurasi Nginx tambahan yang diperlukan untuk soal ini.
+
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa halaman depan ini berfungsi dan tautan di dalamnya mengarah ke tujuan yang benar, kami melakukan validasi dari klien **Earendil** menggunakan `curl`.
+
+**Cara Validasi:**
+
+**Mengakses Halaman Depan:**
+    Pertama, kami mengakses nama domain kanonik `www.k55.com` tanpa *path* tambahan.
+
+    ```sh
+    curl http://www.k55.com/
+    ```
+![](assets/soal_20_2.png)
+
+    **Hasil yang Diharapkan:** *Output*-nya harus berupa kode HTML dari file `index.html` yang telah kami buat, yang berisi judul dan kedua tautan.
+
+
+Keberhasilan `curl` dalam mengambil konten halaman depan memvalidasi bahwa *reverse proxy* Sirion berhasil menyajikan konten lokalnya sendiri dan siap untuk mengarahkan pengguna ke layanan *backend* yang sesuai melalui tautan yang disediakan.

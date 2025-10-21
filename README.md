@@ -587,7 +587,7 @@ Untuk membuktikan bahwa *web server* dinamis di Vingilot berfungsi dengan benar,
     ![](assets/soal_10.png)
 
 
-11. Di muara sungai, Sirion berdiri sebagai reverse proxy. Terapkan path-based routing: /static → Lindon dan /app → Vingilot, sambil meneruskan header Host dan X-Real-IP ke backend. Pastikan Sirion menerima www.<xxxx>.com (kanonik) dan sirion.<xxxx>.com, dan bahwa konten pada /static dan /app di-serve melalui backend yang tepat.
+11.Di muara sungai, Sirion berdiri sebagai reverse proxy. Terapkan path-based routing: /static → Lindon dan /app → Vingilot, sambil meneruskan header Host dan X-Real-IP ke backend. Pastikan Sirion menerima www.<xxxx>.com (kanonik) dan sirion.<xxxx>.com, dan bahwa konten pada /static dan /app di-serve melalui backend yang tepat.
 
 ---
 
@@ -673,7 +673,8 @@ Untuk membuktikan bahwa *reverse proxy* berfungsi dengan benar, kami melakukan v
 
     **Hasil yang Diharapkan:** *Output*-nya harus berupa teks `Hello Vingilot` yang dihasilkan oleh skrip PHP di **Vingilot**. Ini membuktikan bahwa *path-based routing* untuk layanan dinamis juga berhasil.
 
-Keberhasilan kedua pengujian ini memvalidasi bahwa Sirion telah berhasil dikonfigurasi sebagai *reverse proxy* yang fungsional.
+    ![](assets/soal_11.png)
+
 
 12. Ada kamar kecil di balik gerbang yakni /admin. Lindungi path tersebut di Sirion menggunakan Basic Auth, akses tanpa kredensial harus ditolak dan akses dengan kredensial yang benar harus diizinkan.
 
@@ -762,7 +763,8 @@ Untuk membuktikan bahwa *Basic Authentication* berfungsi, kami melakukan dua ske
 
     **Hasil yang Diharapkan:** Server berhasil mengotentikasi pengguna dan menyajikan konten dari file `index.html`, yaitu `Sirion Admin GG`. Ini membuktikan bahwa pengguna dengan kredensial yang benar dapat mengakses area yang dilindungi.
 
-Keberhasilan kedua pengujian ini memvalidasi bahwa kami telah berhasil mengamankan direktori `/admin/` menggunakan *Basic Authentication*.
+    ![](assets/soal_12.png)
+
 
 
 13. “Panggil aku dengan nama,” ujar Sirion kepada mereka yang datang hanya menyebut angka. Kanonisasikan endpoint, akses melalui IP address Sirion maupun sirion.<xxxx>.com harus redirect 301 ke www.<xxxx>.com sebagai hostname kanonik.
@@ -819,6 +821,7 @@ Jika konfigurasi berhasil, server tidak akan menampilkan konten halaman. Sebalik
   * **`HTTP/1.1 301 Moved Permanently`**: Kode status yang menandakan pengalihan permanen.
   * **`Location: http://www.k55.com/`**: URL tujuan ke mana klien harus diarahkan.
 
-Hasil ini secara akurat memvalidasi bahwa setiap pengguna yang mencoba mengakses server menggunakan alamat IP akan secara otomatis dan paksa diarahkan untuk menggunakan nama domain kanonik `www.k55.com`, sesuai dengan tujuan dari soal ini.
+    ![](assets/soal_13.png)
+
 
 14. Di Vingilot, catatan kedatangan harus jujur. Pastikan access log aplikasi di Vingilot mencatat IP address klien asli saat lalu lintas melewati Sirion (bukan IP Sirion).

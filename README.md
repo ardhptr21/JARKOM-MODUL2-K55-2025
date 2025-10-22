@@ -15,6 +15,20 @@
 
 ![](assets/topology.png)
 
+Pada tahap awal ini, kami membangun fondasi topologi jaringan. Sesuai dengan narasi, **Eonwe** bertindak sebagai *router* utama yang merentangkan tiga jalur atau subnet yang berbeda:
+
+1.  **Jalur Barat:** Jaringan untuk klien Earendil dan Elwing.
+2.  **Jalur Timur:** Jaringan untuk klien Círdan, Elrond, dan Maglor.
+3.  **Jalur DMZ:** Jaringan terpisah untuk semua server (Sirion, Tirion, Valmar, Lindon, dan Vingilot).
+
+Kami merancang skema pengalamatan IP menggunakan blok privat `10.91.0.0/16` dan mengalokasikan subnet `/24` yang unik untuk setiap jalur.
+
+-----
+
+#### **Konfigurasi Jaringan**
+
+Berikut adalah detail konfigurasi alamat IP dan *gateway* yang diterapkan pada setiap *node* di GNS3. Alamat IP *gateway* pada setiap subnet selalu merujuk ke alamat IP yang terpasang di *interface* Eonwe yang sesuai.
+
 **Eonwe**
 
 ```
@@ -136,33 +150,124 @@ iface eth0 inet static
   netmask 255.255.255.0
   gateway 10.91.3.1
 ```
+#### **Validasi**
+
+Untuk membuktikan bahwa konfigurasi dasar ini benar, kami melakukan validasi konektivitas dari setiap *node*.
+
+**Cara Validasi:**
+Validasi dilakukan dengan menggunakan perintah `ping` dari setiap *host* ke *default gateway*-nya masing-masing. Sebagai contoh, dari klien **Elwing** (`10.91.1.3`), kami menjalankan:
+
+```sh
+ping 10.91.1.1
+```
+
+**Hasil yang Diharapkan:**
+Keberhasilan perintah `ping` (mendapatkan balasan *reply*) dari setiap *host* ke *gateway*-nya mengkonfirmasi bahwa:
+
+1.  Konfigurasi IP address dan netmask pada *host* sudah benar.
+2.  Konektivitas fisik dan *layer 2* (melalui *switch*) ke *router* Eonwe berfungsi.
+3.  Konfigurasi IP address pada *interface* Eonwe sudah benar.
+
+---
 
 2. Angin dari luar mulai berhembus ketika Eonwe membuka jalan ke awan NAT. Pastikan jalur WAN di router aktif dan NAT meneruskan trafik keluar bagi seluruh alamat internal sehingga host di dalam dapat mencapai layanan di luar menggunakan IP address.
 
----
-Isi konfigurasi pada router Eonwe /root/.bashrc
+Pada tahap ini, kami membuka akses internet untuk seluruh *host* yang berada di dalam jaringan internal (Jalur Barat, Jalur Timur, dan DMZ). Tugas ini diselesaikan dengan mengkonfigurasi **Eonwe** sebagai *router* untuk melakukan **NAT (Network Address Translation)**.
+
+Dengan NAT, Eonwe akan "menerjemahkan" alamat IP privat dari setiap *host* internal menjadi alamat IP publik miliknya sendiri saat mereka mencoba mengakses internet. Ini memungkinkan banyak perangkat berbagi satu koneksi internet.
+
+-----
+
+#### **Konfigurasi di Eonwe**
+
+Langkah pertama adalah memastikan *IP forwarding* diaktifkan pada Eonwe, yang mengizinkannya untuk meneruskan paket data antar jaringan yang berbeda.
+
+Selanjutnya, kami menambahkan satu aturan `iptables` pada Eonwe. Aturan ini menginstruksikan *kernel* untuk melakukan `MASQUERADE` (salah satu bentuk NAT) pada semua paket yang keluar melalui *interface* `eth0` (jalur WAN ke internet) dan berasal dari jaringan internal `10.91.0.0/16`.
+
 ```sh
 apt update
 apt install iptables -y
 iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE -s 10.91.0.0/16
 ```
 
+-----
+
+#### **Validasi**
+
+Untuk membuktikan bahwa konfigurasi NAT berfungsi dengan benar, kami melakukan pengujian konektivitas dari salah satu klien internal, yaitu **Earendil**, ke sebuah alamat IP publik di internet.
+
+**Cara Validasi:**
+Kami menggunakan perintah `ping` dari terminal Earendil untuk mengirim paket ke server DNS publik milik Google di alamat `8.8.8.8`. Pengujian ini dilakukan dengan menggunakan alamat IP secara langsung untuk memastikan konektivitas jaringan murni tanpa bergantung pada DNS.
+
+```sh
+ping 8.8.8.8
+```
+
+**Hasil yang Diharapkan:**
+Jika konfigurasi NAT berhasil, Earendil akan menerima balasan (*reply*) dari `8.8.8.8`. Ini membuktikan bahwa:
+
+1.  Permintaan `ping` dari Earendil (dengan IP privat `10.91.1.2`) berhasil sampai ke Eonwe.
+2.  Eonwe berhasil mengubah alamat IP sumber menjadi alamat IP publiknya dan meneruskan permintaan ke internet.
+3.  Balasan dari internet berhasil kembali ke Eonwe, yang kemudian menerjemahkannya kembali dan mengirimkannya ke Earendil.
+
+
 3. Kabar dari Barat menyapa Timur. Pastikan kelima klien dapat saling berkomunikasi lintas jalur (routing internal via Eonwe berfungsi), lalu pastikan setiap host non-router menambahkan resolver 192.168.122.1 saat interfacenya aktif agar akses paket dari internet tersedia sejak awal.
 
----
-Masukkan resolver 192.168.122.1 ke semua non-router
-```sh
-echo "nameserver 192.168.122.1" > /etc/resolv.conf
-```
-Lalu untuk mengecek klien barat menyapa timur dengan ngeping ip 10.91.2.2 pada terminal router timur misal Earendil
-```sh
-ping 10.91.2.2
-```
+-----
+Pada tahap ini, kami memastikan dua hal fundamental: pertama, bahwa semua klien di jalur yang berbeda (Barat dan Timur) dapat saling berkomunikasi melalui *router* **Eonwe**. Kedua, kami mengkonfigurasi semua *host* non-router dengan *resolver* DNS sementara agar dapat mengakses internet untuk kebutuhan instalasi paket di awal.
+
+-----
+
+#### **Konfigurasi**
+
+1.  **Routing Internal:** Konektivitas antar-subnet (misalnya antara Jalur Barat dan Jalur Timur) secara implisit telah diaktifkan pada soal sebelumnya saat kami mengaktifkan *IP forwarding* pada Eonwe. Ini memungkinkan Eonwe untuk meneruskan paket data dari satu jaringan ke jaringan lainnya.
+
+2.  **Resolver DNS Awal:** Sesuai dengan peraturan praktikum, kami menambahkan *nameserver* `192.168.122.1` (DNS yang disediakan oleh GNS3) ke dalam file `/etc/resolv.conf` pada setiap *host* non-router.
+
+    ```sh
+    echo "nameserver 192.168.122.1" > /etc/resolv.conf
+    ```
+
+-----
+
+#### **Validasi**
+
+Kami melakukan dua jenis pengujian untuk memvalidasi kedua bagian dari soal ini.
+
+**Cara Validasi:**
+
+1.  **Validasi Routing Internal:**
+    Untuk membuktikan bahwa Eonwe berhasil merutekan trafik antar jalur, kami melakukan `ping` dari klien di Jalur Barat, **Earendil** (`10.91.1.2`), ke klien di Jalur Timur, **Cirdan** (`10.91.2.2`).
+
+    ```sh
+    ping 10.91.2.2
+    ```
+
+    **Hasil yang Diharapkan:** Keberhasilan `ping` (mendapatkan balasan *reply*) menunjukkan bahwa Eonwe berfungsi dengan benar sebagai *router* internal yang menghubungkan kedua subnet.
+
+2.  **Validasi Resolver DNS dan Akses Internet:**
+    Untuk membuktikan bahwa *resolver* DNS awal berfungsi, kami melakukan `ping` dari salah satu klien (misalnya **Earendil**) ke nama domain publik seperti `google.com`.
+
+    ```sh
+    ping google.com
+    ```
+
+    **Hasil yang Diharapkan:** Sebelum konfigurasi `/etc/resolv.conf`, perintah ini akan gagal dengan pesan `Temporary failure in name resolution`. Setelah konfigurasi, keberhasilan `ping` ke `google.com` memvalidasi bahwa *host* tersebut kini dapat menggunakan *nameserver* `192.168.122.1` untuk menerjemahkan nama domain dan memiliki akses ke internet.
+    
 4. Para penjaga nama naik ke menara, di Tirion (ns1/master) bangun zona \<xxxx>.com sebagai authoritative dengan SOA yang menunjuk ke ns1.\<xxxx>.com dan catatan NS untuk ns1.\<xxxx>.com dan ns2.<xxxx>.com. Buat A record untuk ns1.\<xxxx>.com dan ns2.\<xxxx>.com yang mengarah ke alamat Tirion dan Valmar sesuai glosarium, serta A record apex \<xxxx>.com yang mengarah ke alamat Sirion (front door), aktifkan notify dan allow-transfer ke Valmar, set forwarders ke 192.168.122.1. Di Valmar (ns2/slave) tarik zona \<xxxx>.com dari Tirion dan pastikan menjawab authoritative. pada seluruh host non-router ubah urutan resolver menjadi ns1.\<xxxx>.com → ns2.\<xxxx>.com → 192.168.122.1. Verifikasi query ke apex dan hostname layanan dalam zona dijawab melalui ns1/ns2.
 
 ---
 
-**Tirion**
+Pada tahap ini, kami membangun sistem DNS internal yang tangguh untuk domain `k55.com`. Tujuannya adalah untuk membuat **Tirion** berfungsi sebagai server DNS *master* (utama) dan **Valmar** sebagai server DNS *slave* (cadangan). Ini menciptakan redundansi, memastikan bahwa jika server utama gagal, server cadangan dapat mengambil alih.
+
+---
+
+### **Konfigurasi di Tirion (Master)**
+
+Langkah pertama adalah menginstal BIND9 dan membuat semua file konfigurasi yang diperlukan untuk *zone master*.
+
+1. Instalasi dan Konfigurasi Dasar:Bash
+Kami menginstal BIND9 dan mengatur named.conf.options untuk meneruskan (forward) permintaan DNS yang tidak dikenal ke DNS internet (192.168.122.1).
 
 ```sh
 apt update
@@ -192,6 +297,8 @@ EOF
 
 ![](assets/tirion-named-options.png)
 
+2. Pembuatan File Zone:
+Kami membuat file zone /etc/bind/k55/k55.com yang berisi catatan SOA (Start of Authority), NS (Name Server), dan A (Address) yang diperlukan.
 ```sh
 mkdir -p /etc/bind/k55 && cat <<EOF > /etc/bind/k55/k55.com
 \$TTL    604800          ; Waktu cache default (detik)
@@ -215,6 +322,8 @@ EOF
 
 ![](assets/zone-conf-k55.png)
 
+3. Pendaftaran Zone Master:
+Kami mendaftarkan zone k55.com sebagai master di file /etc/bind/named.conf.local dan mengizinkan Valmar (10.91.3.4) untuk menyalinnya (allow-transfer).
 ```sh
 cat <<EOF > /etc/bind/named.conf.local
 zone "k55.com" {
@@ -235,6 +344,7 @@ service bind9 restart
 
 ![](assets/tirion-restart-bind.png)
 
+Konfigurasi di Semua Klien
 ```sh
 echo "nameserver 10.91.3.3" > /etc/resolv.conf
 echo "nameserver 10.91.3.4" >> /etc/resolv.conf
@@ -247,7 +357,12 @@ dig @localhost k55.com
 
 ![](assets/dig-result-tirion.png)
 
-**Valmar**
+### **Konfigurasi di Valmar (Slave)**
+
+Di Valmar, kami mengkonfigurasinya untuk menjadi *slave* dari Tirion.
+
+1. Pendaftaran Zone Slave:
+Di file /etc/bind/named.conf.local, kami mendaftarkan zone k55.com dengan tipe slave dan menunjuk Tirion (10.91.3.3) sebagai sumber datanya (masters).
 
 ```sh
 apt update
@@ -303,6 +418,24 @@ echo "nameserver 10.91.3.3" > /etc/resolv.conf
 echo "nameserver 10.91.3.4" >> /etc/resolv.conf
 echo "nameserver 192.168.122.1" >> /etc/resolv.conf
 ```
+
+### **Validasi**
+Untuk membuktikan bahwa sistem DNS *master-slave* berfungsi dengan benar, kami melakukan validasi dari salah satu klien, yaitu **Earendil**.
+
+Cara Validasi:
+Kami menggunakan perintah dig untuk melakukan query DNS ke apex domain (k55.com). Perintah dig adalah alat yang ampuh untuk "bertanya" kepada server DNS dan melihat jawabannya secara detail.
+
+`dig k55.com`
+
+Hasil yang Diharapkan:
+
+Jika konfigurasi berhasil, dig akan mengembalikan respons yang berisi beberapa informasi penting di ANSWER SECTION:
+
+- `k55.com. 604800 IN A 10.91.3.2`: Ini menunjukkan bahwa nama domain `k55.com` berhasil diterjemahkan ke alamat IP Sirion (`10.91.3.2`).
+
+Selain itu, di bagian akhir output akan tertera `SERVER: 10.91.3.3#53(10.91.3.3)`. Ini mengkonfirmasi bahwa server yang menjawab permintaan adalah **Tirion**, server DNS utama kami. Keberhasilan *zone transfer* ke Valmar juga dapat diverifikasi dengan memeriksa keberadaan file *zone* di direktori `/var/lib/bind/k55/` pada Valmar.
+
+Hasil sebagai berikut
 
 ![](assets/other-client-dns-ok.png)
 
@@ -1213,9 +1346,9 @@ Hasil ini memvalidasi beberapa hal secara berurutan:
 3.  Permintaan berhasil masuk ke Sirion (reverse proxy), yang kemudian meneruskannya ke Vingilot.
 4.  Vingilot memproses permintaan dan mengembalikan konten yang benar.
 
-20.Kisah ditutup di beranda Sirion. Sediakan halaman depan bertajuk “War of Wrath: Lindon bertahan” yang memuat tautan ke /app dan /static. Pastikan seluruh klien membuka beranda dan menelusuri kedua tautan tersebut menggunakan hostname (mis. www.<xxxx>.com), bukan IP address.
-
 ---
+
+20.Kisah ditutup di beranda Sirion. Sediakan halaman depan bertajuk “War of Wrath: Lindon bertahan” yang memuat tautan ke /app dan /static. Pastikan seluruh klien membuka beranda dan menelusuri kedua tautan tersebut menggunakan hostname (mis. www.<xxxx>.com), bukan IP address.
 
 Sebagai tugas terakhir, kami membuat halaman depan (*landing page*) sederhana untuk disajikan oleh **Sirion**. Halaman ini berfungsi sebagai portal utama yang memberikan navigasi mudah ke dua layanan utama yang ada di belakang *reverse proxy*: layanan statis (`/static`) dan layanan dinamis (`/app`).
 

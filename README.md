@@ -361,7 +361,7 @@ dig @localhost k55.com
 
 Di Valmar, kami mengkonfigurasinya untuk menjadi *slave* dari Tirion.
 
-1. Pendaftaran Zone Slave:
+Pendaftaran Zone Slave:
 Di file /etc/bind/named.conf.local, kami mendaftarkan zone k55.com dengan tipe slave dan menunjuk Tirion (10.91.3.3) sebagai sumber datanya (masters).
 
 ```sh
@@ -443,6 +443,14 @@ Hasil sebagai berikut
 
 ---
 
+Pada soal ini, kami melanjutkan konfigurasi DNS dengan memberikan nama subdomain yang unik untuk setiap *host* non-router di dalam domain `k55.com`. Tujuannya adalah agar setiap *host* tidak hanya dapat dihubungi melalui alamat IP-nya, tetapi juga melalui nama yang lebih mudah diingat (misalnya, `earendil.k55.com`).
+
+-----
+
+#### **Konfigurasi di Tirion (Master)**
+
+Semua perubahan konfigurasi DNS dilakukan pada server *master*, yaitu **Tirion**. Kami menambahkan serangkaian **`A` record** baru ke dalam file *zone* `/etc/bind/k55/k55.com`. Setiap *record* memetakan nama *host* (sesuai glosarium) ke alamat IP statis yang telah ditetapkan pada Soal 1.
+
 ```sh
 cat <<EOF >> /etc/bind/k55/k55.com
 earendil       IN       A      10.91.1.2
@@ -459,15 +467,48 @@ EOF
 
 ![](assets/update-subdomain-perhost.png)
 
+Setelah file disimpan, kami menaikkan nomor serial SOA dan me-restart layanan `bind9` untuk menerapkan perubahan tersebut.
+
 ```sh
 service bind9 restart
+```
+#### **Validasi**
+
+Untuk membuktikan bahwa semua subdomain baru tersebut berfungsi dengan benar, kami melakukan validasi dari salah satu klien, yaitu **Earendil**.
+
+**Cara Validasi:**
+Kami menggunakan perintah `ping` dengan menargetkan beberapa nama *host* yang baru dibuat, seperti `elwing.k55.com`, `lindon.k55.com`, dan `maglor.k55.com`.
+
+```sh
+ping elwing.k55.com
+ping lindon.k55.com
+ping maglor.k55.com
 ```
 
 ![](assets/check-subdo-ok.png)
 
+**Hasil yang Diharapkan:**
+Jika konfigurasi DNS benar, perintah `ping` akan berhasil melakukan dua hal:
+
+1.  **Resolusi Nama:** Nama domain (misalnya `lindon.k55.com`) akan berhasil diterjemahkan oleh DNS menjadi alamat IP yang benar (`10.91.3.5`).
+2.  **Konektivitas:** Klien akan menerima balasan *reply* dari alamat IP tersebut.
+
+Keberhasilan `ping` ke beberapa *host* yang berbeda di subnet yang berbeda (Jalur Barat, Timur, dan DMZ) memvalidasi bahwa semua `A` record yang kami tambahkan telah berfungsi dengan benar di seluruh jaringan.
+
 6. Lonceng Valmar berdentang mengikuti irama Tirion. Pastikan zone transfer berjalan, Pastikan Valmar (ns2) telah menerima salinan zona terbaru dari Tirion (ns1). Nilai serial SOA di keduanya harus sama
 
 ---
+
+Pada soal ini, kami melakukan verifikasi untuk memastikan bahwa mekanisme replikasi antara server DNS *master* (**Tirion**) dan *slave* (**Valmar**) berjalan dengan sukses. Proses ini, yang dikenal sebagai *zone transfer*, sangat penting untuk menjaga konsistensi data di seluruh server DNS.
+
+Kunci dari proses ini adalah nomor seri **SOA (Start of Authority)**. Setiap kali ada perubahan pada file *zone* di server *master*, administrator wajib menaikkan nomor seri ini. Server *slave* secara berkala akan memeriksa nomor seri di *master*. Jika nomor seri di *master* lebih tinggi dari yang ia miliki, *slave* akan meminta salinan *zone* yang baru.
+
+#### **Validasi**
+
+Untuk membuktikan bahwa Valmar (ns2) telah menerima salinan *zone* terbaru dari Tirion (ns1), kami membandingkan nomor seri SOA dari kedua server secara langsung.
+
+**Cara Validasi:**
+Kami menggunakan perintah `dig` dari salah satu klien untuk melakukan *query* tipe `SOA` secara spesifik ke masing-masing server DNS. Opsi `+short` digunakan untuk mendapatkan output yang ringkas.
 
 **Tirion**
 
@@ -480,6 +521,10 @@ dig @10.91.3.3 k55.com SOA +short
 ```sh
 dig @10.91.3.4 k55.com SOA +short
 ```
+**Hasil yang Diharapkan:**
+Jika sinkronisasi berhasil, *output* dari kedua perintah tersebut harus **identik**. Ini menunjukkan bahwa Valmar telah berhasil menyalin *zone* dari Tirion dan memiliki nomor seri yang sama.
+
+Keberhasilan validasi ini menegaskan bahwa arsitektur DNS *master-slave* kami berfungsi dengan benar, memastikan redundansi dan konsistensi data.
 
 ![](assets/check-serial-key-dns.png)
 
@@ -493,6 +538,20 @@ dig @10.91.3.4 k55.com SOA +short
 
 ---
 
+Pada soal ini, kami membuat alias atau "nama panggilan" untuk layanan-layanan utama kami menggunakan **CNAME record**. Tujuannya adalah untuk menyediakan *hostname* yang lebih umum dan mudah diingat (seperti `www`) yang menunjuk ke *hostname* asli dari layanan tersebut.
+
+Kami menetapkan tiga CNAME:
+
+  * `www.k55.com` sebagai alias untuk `sirion.k55.com` (gerbang utama).
+  * `static.k55.com` sebagai alias untuk `lindon.k55.com` (web statis).
+  * `app.k55.com` sebagai alias untuk `vingilot.k55.com` (web dinamis).
+
+-----
+
+#### **Konfigurasi di Tirion (Master)**
+
+Semua perubahan konfigurasi DNS dilakukan pada server *master*, yaitu **Tirion**. Kami menambahkan tiga `CNAME` record berikut ke dalam file *zone* `/etc/bind/k55/k55.com`.
+
 ```sh
 cat <<EOF >> /etc/bind/k55/k55.com
 www       IN       CNAME      sirion.k55.com.
@@ -501,13 +560,36 @@ app       IN       CNAME      elrond.k55.com.
 
 EOF
 ```
-
+Setelah file disimpan, kami menaikkan nomor serial SOA dan me-restart layanan `bind9` untuk menerapkan perubahan.
 ![](assets/add-cname-dns.png)
 
 ```sh
 service bind9 restart
 ```
+#### **Validasi**
 
+Untuk membuktikan bahwa semua CNAME berfungsi dengan benar, kami melakukan verifikasi dari dua klien yang berbeda, yaitu **Earendil** (Jalur Barat) dan **Cirdan** (Jalur Timur).
+
+**Cara Validasi:**
+Kami menggunakan perintah `dig` dengan tipe `CNAME` dan opsi `+short` untuk melihat secara langsung ke mana setiap alias diarahkan.
+
+  * **Dari Earendil dan Cirdan:**
+    ```sh
+    dig www.k55.com CNAME +short
+    dig static.k55.com CNAME +short
+    dig app.k55.com CNAME +short
+    ```
+
+**Hasil yang Diharapkan:**
+Jika konfigurasi berhasil, *output* dari perintah-perintah tersebut harus secara konsisten menampilkan nama *hostname* kanonik yang sesuai:
+
+```
+sirion.k55.com.
+lindon.k55.com.
+vingilot.k55.com.
+```
+
+Keberhasilan pengujian dari dua klien yang berbeda ini memvalidasi bahwa `CNAME` record telah berhasil dipropagasi dan diresolusi dengan benar di seluruh jaringan.
 ![](assets/from-earendil-test-cname-ok.png)
 ![](assets/from-cirdan-test-cname-ok.png)
 

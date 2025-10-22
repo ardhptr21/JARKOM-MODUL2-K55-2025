@@ -454,8 +454,6 @@ Tentu, mari kita lanjutkan ke soal 9. Berikut adalah format laporan untuk `READM
 
 -----
 
-### 9\. Lampion Lindon Dinyalakan (Web Server Statis)
-
 Pada soal ini, kami bertugas untuk mengaktifkan **Lindon** sebagai *web server* statis. Sesuai permintaan, *server* ini harus menyajikan konten dari direktori `/annals/` dengan fitur *autoindex* (daftar file) aktif. Akses ke *server* ini dilakukan melalui *hostname* `static.k55.com`.
 
 #### **Konfigurasi di Lindon**
@@ -1249,9 +1247,9 @@ Untuk membuktikan bahwa halaman depan ini berfungsi dan tautan di dalamnya menga
 **Mengakses Halaman Depan:**
     Pertama, kami mengakses nama domain kanonik `www.k55.com` tanpa *path* tambahan.
 
-    ```sh
-    curl http://www.k55.com/
-    ```
+```sh
+curl http://www.k55.com/
+```
 ![](assets/soal_20_2.png)
 
     **Hasil yang Diharapkan:** *Output*-nya harus berupa kode HTML dari file `index.html` yang telah kami buat, yang berisi judul dan kedua tautan.
